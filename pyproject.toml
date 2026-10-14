@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "panta-gate-checker"
+version = "0.1.0"
+description = "Desktop endurance test application for the Panta gate"
+authors = ["Team RnD <info@nanotempertech.com>"]
+readme = "README.md"
+packages = [{ include = "panta_gate_checker", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "~3.9"
+grpcio = "1.39.0"
+protobuf = "3.20.3"
+ntt-proto = { version = "2.3.1", source = "ntt_index" }
+reportlab = "^4.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pyinstaller = "^6.16"
+
+[[tool.poetry.source]]
+name = "ntt_index"
+url = "https://pypi.nanotempertech.com/ntt/index/+simple/"
+priority = "explicit"
+
+[tool.poetry.scripts]
+panta-gate-checker = "panta_gate_checker.app:main"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
