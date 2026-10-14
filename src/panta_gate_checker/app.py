@@ -113,7 +113,7 @@ class GateCheckerApp(tk.Tk):
         self.connect_button = ttk.Button(device_row, text="Check device", command=self._check_device)
         self.connect_button.grid(row=0, column=2, sticky="e")
 
-        self._field(settings, "Pandora endpoint", self.endpoint, 1, 0)
+        self._field(settings, "Pandora ip address", self.endpoint, 1, 0)
         self._field(settings, "Test name", self.test_name, 1, 2)
         self._field(settings, "Number of cycles", self.cycles, 2, 0)
         self._field(settings, "Cancel open operations (%)", self.cancel_percent, 2, 2)
