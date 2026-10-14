@@ -9,7 +9,7 @@ Desktop application for repeatable Panta gate open/close endurance tests through
 - Polls the gate state every second and starts the next movement as soon as the gate arrives.
 - Cancels 10% of open operations by default and verifies that the gate recovers to `CLOSED`.
 - Stops on the first failed cycle.
-- Creates a PDF report with the device serial number, test name, cycle counts, per-cycle results, and overall result.
+- Creates a PDF summary with the device serial number, test name, operator name, cycle counts, and overall result.
 
 Pandora must be running with gRPC enabled. Its normal endpoint is port `2316`.
 

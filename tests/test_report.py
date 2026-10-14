@@ -15,7 +15,7 @@ def test_create_pdf_report(tmp_path) -> None:
         finished_at=now,
     )
 
-    output = create_pdf_report(summary, tmp_path / "report.pdf")
+    output = create_pdf_report(summary, tmp_path / "report.pdf", "Alex Operator")
 
     assert output.read_bytes().startswith(b"%PDF")
     assert output.stat().st_size > 1000

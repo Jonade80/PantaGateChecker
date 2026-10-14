@@ -25,8 +25,8 @@ class GateCheckerApp(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Panta Gate Checker")
-        self.geometry("940x766")
-        self.minsize(780, 666)
+        self.geometry("940x800")
+        self.minsize(780, 700)
         self.configure(bg="#F3F1EA")
         icon_path = _resource_path("PantaGateChecker.ico")
         if icon_path.exists():
@@ -38,6 +38,7 @@ class GateCheckerApp(tk.Tk):
 
         self.endpoint = tk.StringVar(value=DEFAULT_PANDORA_ENDPOINT)
         self.test_name = tk.StringVar(value=DEFAULT_TEST_NAME)
+        self.operator_name = tk.StringVar()
         self.cycles = tk.StringVar(value="10")
         self.cancel_percent = tk.StringVar(value="10")
         self.output_directory = tk.StringVar(value=str(DEFAULT_OUTPUT_DIRECTORY))
@@ -113,14 +114,15 @@ class GateCheckerApp(tk.Tk):
         self.connect_button = ttk.Button(device_row, text="Check device", command=self._check_device)
         self.connect_button.grid(row=0, column=2, sticky="e")
 
-        self._field(settings, "Pandora ip address", self.endpoint, 1, 0)
+        self._field(settings, "Pandora IP Address", self.endpoint, 1, 0)
         self._field(settings, "Test name", self.test_name, 1, 2)
         self._field(settings, "Number of cycles", self.cycles, 2, 0)
         self._field(settings, "Cancel open operations (%)", self.cancel_percent, 2, 2)
+        self._field(settings, "Operator name", self.operator_name, 3, 0)
 
-        ttk.Label(settings, text="Report folder", style="Panel.TLabel").grid(row=3, column=0, sticky="w", pady=(12, 0))
-        ttk.Entry(settings, textvariable=self.output_directory).grid(row=3, column=1, columnspan=2, sticky="ew", padx=(10, 8), pady=(12, 0))
-        ttk.Button(settings, text="Browse...", command=self._choose_output_directory).grid(row=3, column=3, sticky="e", pady=(12, 0))
+        ttk.Label(settings, text="Report folder", style="Panel.TLabel").grid(row=4, column=0, sticky="w", pady=(12, 0))
+        ttk.Entry(settings, textvariable=self.output_directory).grid(row=4, column=1, columnspan=2, sticky="ew", padx=(10, 8), pady=(12, 0))
+        ttk.Button(settings, text="Browse...", command=self._choose_output_directory).grid(row=4, column=3, sticky="e", pady=(12, 0))
 
         results_frame = ttk.Frame(content, style="Panel.TFrame", padding=14)
         results_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
@@ -197,8 +199,12 @@ class GateCheckerApp(tk.Tk):
                 raise ValueError("Number of cycles must be at least 1")
             if not 0 <= cancel_probability <= 1:
                 raise ValueError("Cancellation percentage must be from 0 to 100")
-            if not self.endpoint.get().strip() or not self.test_name.get().strip():
-                raise ValueError("Endpoint and test name are required")
+            if (
+                not self.endpoint.get().strip()
+                or not self.test_name.get().strip()
+                or not self.operator_name.get().strip()
+            ):
+                raise ValueError("Endpoint, test name, and operator name are required")
         except ValueError as error:
             messagebox.showerror("Invalid settings", str(error), parent=self)
             return
@@ -214,10 +220,11 @@ class GateCheckerApp(tk.Tk):
         self._tick_timer()
         endpoint = self.endpoint.get().strip()
         test_name = self.test_name.get().strip()
+        operator_name = self.operator_name.get().strip()
         output_directory = self.output_directory.get()
         self.worker = threading.Thread(
             target=self._run_test,
-            args=(cycles, cancel_probability, endpoint, test_name, output_directory),
+            args=(cycles, cancel_probability, endpoint, test_name, operator_name, output_directory),
             daemon=True,
         )
         self.worker.start()
@@ -228,6 +235,7 @@ class GateCheckerApp(tk.Tk):
         cancel_probability: float,
         endpoint: str,
         test_name: str,
+        operator_name: str,
         output_directory: str,
     ) -> None:
         client = PandoraGrpcClient(endpoint)
@@ -261,7 +269,11 @@ class GateCheckerApp(tk.Tk):
             f"{summary.device_name}_{summary.test_name}_{summary.started_at:%Y%m%d_%H%M%S}.pdf"
         )
         try:
-            report_path = create_pdf_report(summary, Path(output_directory) / report_name)
+            report_path = create_pdf_report(
+                summary,
+                Path(output_directory) / report_name,
+                operator_name,
+            )
             self.events.put(("complete", (summary, report_path)))
         except Exception as error:
             self.events.put(("error", f"Could not create PDF report: {error}"))
