@@ -8,6 +8,7 @@ import threading
 import time
 import tkinter as tk
 from datetime import datetime
+from math import ceil
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -55,6 +56,7 @@ class GateCheckerApp(tk.Tk):
         self.requested_cycles: int | None = None
         self.cycle_durations: list[float] = []
         self.timer_job: str | None = None
+        self.estimate_deadline: float | None = None
         self.report_path: Path | None = None
 
         self._configure_styles()
@@ -329,15 +331,11 @@ class GateCheckerApp(tk.Tk):
 
     def _update_time_estimate(self) -> None:
         if self.test_started_at is not None:
-            elapsed = int(time.monotonic() - self.test_started_at)
-            if len(self.cycle_durations) < 2:
+            if self.estimate_deadline is None:
                 self.test_time.set("Calculating remaining time...")
-                return
-
-            remaining_cycles = max(0, (self.requested_cycles or 0) - len(self.cycle_durations))
-            remaining = _estimate_remaining_seconds(self.cycle_durations[:2], remaining_cycles)
-            if remaining is not None:
-                self.test_time.set(f"Estimated remaining time: {_format_duration(remaining)}")
+            else:
+                remaining = max(0, ceil(self.estimate_deadline - time.monotonic()))
+                self.test_time.set(f"Estimated remaining time: {_format_countdown(remaining)}")
             return
         self.test_time.set("")
 
@@ -397,6 +395,7 @@ class GateCheckerApp(tk.Tk):
         self.requested_cycles = cycles
         self.progress.configure(maximum=cycles, value=0)
         self.cycle_durations.clear()
+        self.estimate_deadline = None
         self._tick_timer()
         endpoint = self.endpoint.get().strip()
         test_name = self.test_name.get().strip()
@@ -470,6 +469,18 @@ class GateCheckerApp(tk.Tk):
         self._update_time_estimate()
         self.timer_job = self.after(1000, self._tick_timer)
 
+    def _recalculate_time_estimate(self) -> None:
+        if self.test_started_at is None or self.requested_cycles is None:
+            self.estimate_deadline = None
+            return
+        elapsed = max(0.0, time.monotonic() - self.test_started_at)
+        remaining = _estimate_remaining_seconds(
+            elapsed,
+            len(self.cycle_durations),
+            self.requested_cycles,
+        )
+        self.estimate_deadline = time.monotonic() + remaining if remaining is not None else None
+
     def _process_events(self) -> None:
         try:
             while True:
@@ -494,6 +505,7 @@ class GateCheckerApp(tk.Tk):
                         self.cycle_durations.append(
                             (result.finished_at - result.started_at).total_seconds()
                         )
+                        self._recalculate_time_estimate()
                         self._update_time_estimate()
                         row_number = len(self.results.get_children())
                         outcome = "PASS" if result.passed else "FAIL"
@@ -536,18 +548,20 @@ class GateCheckerApp(tk.Tk):
             self.timer_job = None
         self.report_path = report_path
         self.open_test_folder_button.configure(state="normal")
-        elapsed = int(time.monotonic() - self.test_started_at) if self.test_started_at is not None else 0
         self.test_started_at = None
-        self.test_time.set(f"Actual test time: {_format_duration(elapsed)}")
+        self.estimate_deadline = None
         if summary.error_message or suffix == "PDF report was not created":
+            self.test_time.set("Error occurred")
             error = summary.error_message or suffix
             self.status.set(f"Error occurred: {error}")
             self._set_connection_indicator("#C62828")
         elif self.stop_event.is_set() and len(summary.results) < summary.requested_cycles:
+            self.test_time.set("Test stopped")
             self.status.set(
                 f"Test stopped — {len(summary.results)} of {summary.requested_cycles} cycles completed | {suffix}"
             )
         else:
+            self.test_time.set("Test completed")
             outcome = "PASSED" if summary.passed else "FAILED"
             self.status.set(f"Test completed — {outcome} | {suffix}")
         self.start_button.configure(state="normal")
@@ -599,11 +613,22 @@ def _format_duration(total_seconds: int) -> str:
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def _estimate_remaining_seconds(cycle_durations: list[float], remaining_cycles: int) -> int | None:
-    if len(cycle_durations) < 2:
+def _format_countdown(total_seconds: int) -> str:
+    hours, remainder = divmod(max(0, total_seconds), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _estimate_remaining_seconds(
+    elapsed_seconds: float,
+    completed_cycles: int,
+    requested_cycles: int,
+) -> int | None:
+    if completed_cycles < 2:
         return None
-    average_cycle_duration = sum(cycle_durations[:2]) / 2
-    return round(average_cycle_duration * max(0, remaining_cycles))
+    remaining_cycles = max(0, requested_cycles - completed_cycles)
+    average_cycle_duration = max(0.0, elapsed_seconds) / completed_cycles
+    return max(0, round(average_cycle_duration * remaining_cycles))
 
 
 def _resource_path(name: str) -> Path:
