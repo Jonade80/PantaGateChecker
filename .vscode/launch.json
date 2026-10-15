@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Panta Gate Checker",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "panta_gate_checker",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        }
+    ]
+}

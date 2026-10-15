@@ -37,8 +37,8 @@ def create_pdf_report(summary: TestSummary, output_path: Path, operator_name: st
         ("Finished", summary.finished_at.strftime("%Y-%m-%d %H:%M:%S")),
         ("Requested cycles", str(summary.requested_cycles)),
         ("Completed cycles", str(completed)),
-        ("Passed cycles", str(passed)),
-        ("Failed cycles", str(failed)),
+        ("Passed", str(passed)),
+        ("Failed", str(failed)),
         ("Cancelled open operations", str(cancelled)),
         ("Result", status),
     ]
@@ -46,7 +46,7 @@ def create_pdf_report(summary: TestSummary, output_path: Path, operator_name: st
         summary_rows.append(("Error", summary.error_message))
 
     story = [
-        Paragraph("Panta Gate Test Report", styles["Title"]),
+        Paragraph("Panta Gate Checker Report", styles["Title"]),
         Spacer(1, 7 * mm),
         _summary_table(summary_rows),
     ]
@@ -57,16 +57,21 @@ def create_pdf_report(summary: TestSummary, output_path: Path, operator_name: st
 
 def _summary_table(rows: list[tuple[str, str]]) -> Table:
     table = Table(rows, colWidths=[52 * mm, 102 * mm])
+    table_style = [
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E5ECE8")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BAC4BF")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+    for row_number, (label, _) in enumerate(rows):
+        if label == "Passed":
+            table_style.append(("TEXTCOLOR", (0, row_number), (-1, row_number), colors.HexColor("#16803C")))
+        elif label == "Failed":
+            table_style.append(("TEXTCOLOR", (0, row_number), (-1, row_number), colors.HexColor("#C62828")))
+
     table.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E5ECE8")),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#BAC4BF")),
-                ("LEFTPADDING", (0, 0), (-1, -1), 7),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ]
-        )
+        TableStyle(table_style)
     )
     return table

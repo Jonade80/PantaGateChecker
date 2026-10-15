@@ -39,15 +39,18 @@ class GateCheckerApp(tk.Tk):
         self.endpoint = tk.StringVar(value=DEFAULT_PANDORA_ENDPOINT)
         self.test_name = tk.StringVar(value=DEFAULT_TEST_NAME)
         self.operator_name = tk.StringVar()
-        self.cycles = tk.StringVar(value="10")
+        self.cycles = tk.StringVar(value="180")
         self.cancel_percent = tk.StringVar(value="10")
+        self.expert_mode = tk.BooleanVar(value=False)
+        self.expert_fields: list[ttk.Entry] = []
         self.output_directory = tk.StringVar(value=str(DEFAULT_OUTPUT_DIRECTORY))
         self.device_name = tk.StringVar(value="Not connected")
         self.status = tk.StringVar(value="Ready")
         self.test_time = tk.StringVar()
         self.test_started_at: float | None = None
+        self.requested_cycles: int | None = None
+        self.cycle_durations: list[float] = []
         self.timer_job: str | None = None
-        self._update_time_estimate()
 
         self._configure_styles()
         self._build_ui()
@@ -60,11 +63,12 @@ class GateCheckerApp(tk.Tk):
         style.configure("Panel.TFrame", background="#FFFFFF")
         style.configure("TLabel", background="#F3F1EA", foreground="#25332E", font=("Aptos", 10))
         style.configure("Panel.TLabel", background="#FFFFFF", foreground="#25332E", font=("Aptos", 10))
-        style.configure("Title.TLabel", background="#153F35", foreground="#FFFFFF", font=("Aptos Display", 22, "bold"))
-        style.configure("Subtitle.TLabel", background="#153F35", foreground="#D7E7DE", font=("Aptos", 10))
+        style.configure("Title.TLabel", background="#153F35", foreground="#FFFFFF", font=("Segoe UI", 30))
+        style.configure("Tagline.TLabel", background="#153F35", foreground="#D7E7DE", font=("Segoe UI", 11))
         style.configure("Accent.TButton", background="#D97A32", foreground="#FFFFFF", font=("Aptos", 10, "bold"), padding=(16, 9))
         style.map("Accent.TButton", background=[("active", "#B95F21"), ("disabled", "#C9C5BE")])
         style.configure("TButton", font=("Aptos", 10), padding=(12, 8))
+        style.configure("Panel.TCheckbutton", background="#FFFFFF", foreground="#25332E", font=("Aptos", 10))
         style.configure("Treeview", font=("Aptos", 9), rowheight=28, background="#FFFFFF", fieldbackground="#FFFFFF")
         style.configure("Treeview.Heading", font=("Aptos", 9, "bold"), background="#E5ECE8", foreground="#153F35")
 
@@ -87,8 +91,8 @@ class GateCheckerApp(tk.Tk):
 
         title_area = tk.Frame(header, bg="#153F35")
         title_area.pack(side="left", fill="both", expand=True)
-        ttk.Label(title_area, text="Panta Gate Checker", style="Title.TLabel").pack(anchor="w", padx=28, pady=(40, 0))
-        ttk.Label(title_area, text="Controlled endurance testing through Pandora gRPC", style="Subtitle.TLabel").pack(anchor="w", padx=30, pady=(2, 0))
+        ttk.Label(title_area, text="Panta Gate Checker", style="Title.TLabel").pack(anchor="w", padx=28, pady=(34, 0))
+        ttk.Label(title_area, text="Automated gate stress testing", style="Tagline.TLabel").pack(anchor="w", padx=30, pady=(0, 0))
 
         content = ttk.Frame(self, padding=22)
         content.pack(fill="both", expand=True)
@@ -114,15 +118,25 @@ class GateCheckerApp(tk.Tk):
         self.connect_button = ttk.Button(device_row, text="Check device", command=self._check_device)
         self.connect_button.grid(row=0, column=2, sticky="e")
 
-        self._field(settings, "Pandora IP Address", self.endpoint, 1, 0)
-        self._field(settings, "Test name", self.test_name, 1, 2)
-        self._field(settings, "Number of cycles", self.cycles, 2, 0)
-        self._field(settings, "Cancel open operations (%)", self.cancel_percent, 2, 2)
-        self._field(settings, "Operator name", self.operator_name, 3, 0)
+        self.expert_fields = [
+            self._field(settings, "Panta IP Adresse", self.endpoint, 1, 0),
+            self._field(settings, "Test Name", self.test_name, 1, 2),
+            self._field(settings, "Number of cycles", self.cycles, 2, 0),
+            self._field(settings, "Cancel Open Operations", self.cancel_percent, 2, 2),
+        ]
+        ttk.Checkbutton(
+            settings,
+            text="Expert Mode",
+            variable=self.expert_mode,
+            command=self._set_expert_mode,
+            style="Panel.TCheckbutton",
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(12, 0))
+        self._field(settings, "Operator name", self.operator_name, 4, 0)
 
-        ttk.Label(settings, text="Report folder", style="Panel.TLabel").grid(row=4, column=0, sticky="w", pady=(12, 0))
-        ttk.Entry(settings, textvariable=self.output_directory).grid(row=4, column=1, columnspan=2, sticky="ew", padx=(10, 8), pady=(12, 0))
-        ttk.Button(settings, text="Browse...", command=self._choose_output_directory).grid(row=4, column=3, sticky="e", pady=(12, 0))
+        ttk.Label(settings, text="Report folder", style="Panel.TLabel").grid(row=5, column=0, sticky="w", pady=(12, 0))
+        ttk.Entry(settings, textvariable=self.output_directory).grid(row=5, column=1, columnspan=2, sticky="ew", padx=(10, 8), pady=(12, 0))
+        ttk.Button(settings, text="Browse...", command=self._choose_output_directory).grid(row=5, column=3, sticky="e", pady=(12, 0))
+        self._set_expert_mode()
 
         results_frame = ttk.Frame(content, style="Panel.TFrame", padding=14)
         results_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
@@ -156,19 +170,42 @@ class GateCheckerApp(tk.Tk):
         self.start_button = ttk.Button(footer, text="Start test", style="Accent.TButton", command=self._start)
         self.start_button.pack(side="right")
 
-    def _field(self, parent: ttk.Frame, label: str, variable: tk.StringVar, row: int, column: int) -> None:
+    def _field(self, parent: ttk.Frame, label: str, variable: tk.StringVar, row: int, column: int) -> ttk.Entry:
         ttk.Label(parent, text=label, style="Panel.TLabel").grid(row=row, column=column, sticky="w", pady=(0 if row == 0 else 12, 0))
-        ttk.Entry(parent, textvariable=variable).grid(row=row, column=column + 1, sticky="ew", padx=(10, 22), pady=(0 if row == 0 else 12, 0))
+        entry = ttk.Entry(parent, textvariable=variable)
+        entry.grid(row=row, column=column + 1, sticky="ew", padx=(10, 22), pady=(0 if row == 0 else 12, 0))
+        return entry
+
+    def _set_expert_mode(self) -> None:
+        state = "normal" if self.expert_mode.get() else "disabled"
+        for field in self.expert_fields:
+            field.configure(state=state)
 
     def _choose_output_directory(self) -> None:
         selected = filedialog.askdirectory(initialdir=self.output_directory.get())
         if selected:
             self.output_directory.set(selected)
 
-    def _update_time_estimate(self, *_args: object) -> None:
+    def _update_time_estimate(self) -> None:
         if self.test_started_at is not None:
+            elapsed = int(time.monotonic() - self.test_started_at)
+            if len(self.cycle_durations) < 2:
+                self.test_time.set(
+                    f"Elapsed {_format_duration(elapsed)} | estimating after 2 cycles "
+                    f"({len(self.cycle_durations)}/2)"
+                )
+                return
+
+            remaining_cycles = max(0, (self.requested_cycles or 0) - len(self.cycle_durations))
+            remaining = _estimate_remaining_seconds(self.cycle_durations[:2], remaining_cycles)
+            if remaining is not None:
+                self.test_time.set(
+                    f"Elapsed {_format_duration(elapsed)} | "
+                    f"Estimated total {_format_duration(elapsed + remaining)} | "
+                    f"Remaining {_format_duration(remaining)}"
+                )
             return
-        self.test_time.set("Duration depends on gate movement | state polled every 1 s")
+        self.test_time.set("")
 
     def _check_device(self) -> None:
         endpoint = self.endpoint.get().strip()
@@ -217,6 +254,8 @@ class GateCheckerApp(tk.Tk):
         self.stop_button.configure(state="normal")
         self.status.set("Connecting to Pandora...")
         self.test_started_at = time.monotonic()
+        self.requested_cycles = cycles
+        self.cycle_durations.clear()
         self._tick_timer()
         endpoint = self.endpoint.get().strip()
         test_name = self.test_name.get().strip()
@@ -287,8 +326,7 @@ class GateCheckerApp(tk.Tk):
     def _tick_timer(self) -> None:
         if self.test_started_at is None:
             return
-        elapsed = int(time.monotonic() - self.test_started_at)
-        self.test_time.set(f"Elapsed {_format_duration(elapsed)} | state polled every 1 s")
+        self._update_time_estimate()
         self.timer_job = self.after(1000, self._tick_timer)
 
     def _process_events(self) -> None:
@@ -309,6 +347,10 @@ class GateCheckerApp(tk.Tk):
                 elif event == "result":
                     result = payload
                     if isinstance(result, CycleResult):
+                        self.cycle_durations.append(
+                            (result.finished_at - result.started_at).total_seconds()
+                        )
+                        self._update_time_estimate()
                         self.results.insert(
                             "",
                             "end",
@@ -354,6 +396,13 @@ def _format_duration(total_seconds: int) -> str:
     if hours:
         return f"{hours}:{minutes:02d}:{seconds:02d}"
     return f"{minutes:02d}:{seconds:02d}"
+
+
+def _estimate_remaining_seconds(cycle_durations: list[float], remaining_cycles: int) -> int | None:
+    if len(cycle_durations) < 2:
+        return None
+    average_cycle_duration = sum(cycle_durations[:2]) / 2
+    return round(average_cycle_duration * max(0, remaining_cycles))
 
 
 def _resource_path(name: str) -> Path:

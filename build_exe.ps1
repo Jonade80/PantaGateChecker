@@ -6,6 +6,9 @@ try {
 		throw "PantaGateChecker is running. Close it before building a release."
 	}
 
+	poetry install --no-interaction
+	if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed with exit code $LASTEXITCODE" }
+
 	poetry run python tools\create_icon.py
 	if ($LASTEXITCODE -ne 0) { throw "Icon generation failed with exit code $LASTEXITCODE" }
 
