@@ -4,7 +4,7 @@ Desktop application for repeatable Panta gate open/close endurance tests through
 
 ## Behavior
 
-- Runs 180 gate cycles by default. The Panta IP address, cycle count, test name, and cancellation percentage stay locked unless **Expert Mode** is enabled.
+- Runs 50 gate cycles by default. The Panta IP address, cycle count, test name, and cancellation percentage stay locked unless **Expert Mode** is enabled.
 - Estimates total and remaining test duration using the average duration of the first two completed cycles.
 - Waits for Pandora's gate-state stream to confirm each operation.
 - Polls the gate state every second and starts the next movement as soon as the gate arrives.
